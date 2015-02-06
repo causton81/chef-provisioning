@@ -14,6 +14,14 @@ module Provisioning
         @chef_server ||= convergence_options[:chef_server] || Cheffish.default_chef_server(config)
       end
 
+      def client_rb_dir
+        File.dirname(convergence_options[:client_rb_path])
+      end
+
+      def client_rb_dot_d
+        File.join(client_rb_dir, 'client.d')
+      end
+
       def setup_convergence(action_handler, machine)
         # Create keys on machine
         public_key = create_keys(action_handler, machine)
@@ -31,6 +39,9 @@ module Provisioning
         # Create client.rb and client.pem on machine
         content = client_rb_content(chef_server_url, machine.node['name'])
         machine.write_file(action_handler, convergence_options[:client_rb_path], content, :ensure_dir => true)
+
+        #Allow users to drop modular configs a la chef-client recipe
+        machine.create_dir(action_handler, client_rb_dot_d)
       end
 
       def converge(action_handler, machine)
@@ -177,18 +188,40 @@ module Provisioning
                               :verify_none
                             end
 
-        content = <<EOM
-chef_server_url #{chef_server_url.inspect}
-node_name #{node_name.inspect}
-client_key #{convergence_options[:client_pem_path].inspect}
-ssl_verify_mode #{ssl_verify_mode.to_sym.inspect}
-EOM
+        client_rb_options = {
+          "chef_server_url" => chef_server_url,
+          "node_name" => node_name,
+          "client_key" => convergence_options[:client_pem_path],
+          "ssl_verify_mode" => ssl_verify_mode.to_sym
+        }
+
+        no_proxy = "localhost,127.0.0.1"
+
         unless convergence_options[:bootstrap_proxy].nil?
-          content << <<EOM
-http_proxy #{convergence_options[:bootstrap_proxy].inspect}
-https_proxy #{convergence_options[:bootstrap_proxy].inspect}
-EOM
+          client_rb_options.merge!({
+            "http_proxy" => convergence_options[:bootstrap_proxy],
+            "https_proxy" => convergence_options[:bootstrap_proxy],
+            "no_proxy" => no_proxy
+          })
         end
+
+        client_rb_options.merge!(convergence_options[:client_rb_options]) if convergence_options[:client_rb_options]
+
+        content = ""
+
+        client_rb_options.each do |option,value|
+          content << "#{option} #{value.inspect}\n"
+        end
+
+        content << <<EOM
+
+Dir.glob(File.join(#{client_rb_dot_d.inspect}, "*.rb")).each do |conf|
+  Chef::Config.from_file(conf)
+end
+EOM
+        content << convergence_options[:client_rb_tail] if convergence_options[:client_rb_tail]
+        content << "\n"
+
         content
       end
     end
