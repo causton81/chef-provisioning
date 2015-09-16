@@ -31,6 +31,30 @@ module Provisioning
         chef_server_url = chef_server[:chef_server_url]
         chef_server_url = machine.make_url_available_to_remote(chef_server_url)
 
+        convergence_options[:remote_forwards].each_pair do |local_url, path_or_config|
+            options = {:force_port_forward => true}
+
+            if path_or_config.class <= Hash
+                normal_path = path_or_config[:normal_path]
+                options.merge! path_or_config
+            else
+                normal_path = path_or_config
+            end
+
+            remote_url = machine.make_url_available_to_remote(local_url, options)
+
+            parts = normal_path.split('/')
+            dest = parts[0..-2].inject(machine.machine_spec.node['normal']) do |memo, part|
+                if not memo[part]
+                    memo[part] = {}
+                end
+
+                memo[part]
+            end
+
+            dest[parts.last] = remote_url
+        end
+
         # Support for multiple ohai hints, required on some platforms
         create_ohai_files(action_handler, machine)
 

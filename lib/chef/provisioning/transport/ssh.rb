@@ -91,6 +91,9 @@ module Provisioning
         Chef::Log.debug("Stdout was:\n#{stdout}") if stdout != '' && !options[:stream] && !options[:stream_stdout] && config[:log_level] != :debug
         Chef::Log.info("Stderr was:\n#{stderr}") if stderr != '' && !options[:stream] && !options[:stream_stderr] && config[:log_level] != :debug
         SSHResult.new(command, execute_options, stdout, stderr, exitstatus)
+      rescue Exception => e
+        Chef::Log.error("Problem executing command on #{host} #{e}")
+        raise
       end
 
       # TODO why does #read_file download it to the target host?
@@ -143,13 +146,16 @@ module Provisioning
         end
       end
 
-      def make_url_available_to_remote(local_url)
+      def make_url_available_to_remote(local_url, **options)
         uri = URI(local_url)
-        if is_local_machine(uri.host)
-          port, host = forward_port(uri.port, uri.host, uri.port, 'localhost')
+        request_remote_port = options[:request_remote_port]
+        remote_ip = @config[:driver_options][:remote_ip] || 'localhost'
+        if is_local_machine(uri.host) or options[:force_port_forward]
+          request_remote_port ||= uri.port
+          port, host = forward_port(uri.port, uri.host, request_remote_port, remote_ip)
           if !port
             # Try harder if the port is already taken
-            port, host = forward_port(uri.port, uri.host, 0, 'localhost')
+            port, host = forward_port(uri.port, uri.host, 0, remote_ip)
             if !port
               raise "Error forwarding port: could not forward #{uri.port} or 0"
             end

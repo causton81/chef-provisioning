@@ -99,7 +99,7 @@ $file.Close
         false
       end
 
-      def make_url_available_to_remote(local_url)
+      def make_url_available_to_remote(local_url, **options)
         uri = URI(local_url)
         host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
         if host == '127.0.0.1' || host == '::1'
