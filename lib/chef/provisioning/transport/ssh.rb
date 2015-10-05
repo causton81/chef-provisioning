@@ -81,6 +81,10 @@ module Provisioning
               channel.on_request "exit-status" do |ch, data|
                 exitstatus = data.read_long
               end
+
+              channel.on_close do |ch2, data|
+                  Chef::Log.info("Close on channel local: #{ch2.local_id}, remote: #{ch2.remote_id}")
+              end
             end
           end
 
