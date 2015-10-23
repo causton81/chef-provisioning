@@ -27,7 +27,7 @@ class MachineBatch < Chef::Resource::LWRPBase
   attribute :driver
   attribute :chef_server
   attribute :machine_options
-  attribute :files, :kind_of => [ Array ]
+  attribute :files, :kind_of => [ Hash ]
 
   def machines(*values)
     if values.size == 0
