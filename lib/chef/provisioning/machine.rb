@@ -90,7 +90,7 @@ module Provisioning
 
     # Ensure the given URL can be reached by the remote side (possibly by port forwarding)
     # Must return the URL that the remote side can use to reach the local_url
-    def make_url_available_to_remote(local_url)
+    def make_url_available_to_remote(local_url, **options)
       raise "make_url_available_to_remote not overridden on #{self.class}"
     end
 

@@ -71,8 +71,8 @@ module Provisioning
         end
       end
 
-      def make_url_available_to_remote(local_url)
-        transport.make_url_available_to_remote(local_url)
+      def make_url_available_to_remote(local_url, **options)
+        transport.make_url_available_to_remote(local_url, **options)
       end
 
       def disconnect
