@@ -42,6 +42,8 @@ module Provisioning
         @ssh_options = ssh_options
         @options = options
         @config = global_config
+        @remote_forwards = ssh_options.delete(:remote_forwards) { Array.new }
+        @ports_forwarded = false
       end
 
       attr_reader :host
@@ -56,6 +58,26 @@ module Provisioning
         stderr = ''
         exitstatus = nil
         session # grab session outside timeout, it has its own timeout
+
+        # remote port forwards only really make sense when executing commands
+        # on the session. I originally had this logic in session() but that
+        # caused problems with SCP.
+        if not @ports_forwarded
+          @ports_forwarded = true
+
+          @remote_forwards.each do |forward_info|
+              # -R flag to openssh client allows optional :remote_host and
+              # requires the other values so let's do that too.
+              remote_host = forward_info.fetch(:remote_host, 'localhost')
+              remote_port = forward_info.fetch(:remote_port)
+              local_host = forward_info.fetch(:local_host)
+              local_port = forward_info.fetch(:local_port)
+
+              actual_port, actual_host = forward_port(local_port, local_host, remote_port, remote_host)
+              Chef::Log.info("#{host} forwarded remote #{actual_host}:#{actual_port} to local #{local_host}:#{local_port}")
+          end
+        end
+
         with_execute_timeout(execute_options) do
           channel = session.open_channel do |channel|
             # Enable PTY unless otherwise specified, some instances require this
@@ -164,10 +186,11 @@ module Provisioning
       def disconnect
         if @session
           begin
-            Chef::Log.debug("Closing SSH session on #{username}@#{host}")
+            Chef::Log.info("Closing SSH session on #{username}@#{host}")
             @session.close
           rescue
           ensure
+            @forwarded_ports = false
             @session = nil
           end
         end
@@ -333,7 +356,7 @@ module Provisioning
 
           actual_remote_port, actual_remote_host = session.forward.active_remote_destinations[[local_port, local_host]]
           if !actual_remote_port
-            Chef::Log.debug("Forwarding local server #{local_host}:#{local_port} to #{username}@#{self.host}")
+            Chef::Log.info("Forwarding local server #{local_host}:#{local_port} to #{username}@#{self.host}")
 
             session.forward.remote(local_port, local_host, remote_port, remote_host) do |new_remote_port, new_remote_host|
 							actual_remote_host = new_remote_host
