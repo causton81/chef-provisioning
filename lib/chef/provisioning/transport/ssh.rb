@@ -42,6 +42,7 @@ module Provisioning
         @ssh_options = ssh_options
         @options = options
         @config = global_config
+        @remote_forwards = ssh_options.delete(:remote_forwards) { Array.new }
       end
 
       attr_reader :host
@@ -190,12 +191,15 @@ module Provisioning
       protected
 
       def session
-        @session ||= begin
+          return @session if @session
+
           # Small initial connection timeout (10s) to help us fail faster when server is just dead
           ssh_start_opts = { timeout:10 }.merge(ssh_options)
           Chef::Log.debug("Opening SSH connection to #{username}@#{host} with options #{ssh_start_opts.dup.tap {
                               |ssh| ssh.delete(:key_data) }.inspect}")
-          begin
+          # we use forward_port below which calls this method so @session needs
+          # to be set before calling forward_port to avoid infinite recursion
+          @session = begin
             if gateway? then gateway.ssh(host, username, ssh_start_opts)
             else Net::SSH.start(host, username, ssh_start_opts)
             end
@@ -203,7 +207,20 @@ module Provisioning
             Chef::Log.debug("Timed out connecting to SSH: #{$!}")
             raise InitialConnectTimeout.new($!)
           end
-        end
+
+          @remote_forwards.each do |forward_info|
+              # -R flag to openssh client allows optional :remote_host and
+              # requires the other values so let's do that too.
+              remote_host = forward_info.fetch(:remote_host, 'localhost')
+              remote_port = forward_info.fetch(:remote_port)
+              local_host = forward_info.fetch(:local_host)
+              local_port = forward_info.fetch(:local_port)
+
+              port, host = forward_port(local_port, local_host, remote_port, remote_host)
+              Chef::Log.info("Forwarded remote #{host}:#{port} to local #{local_host}:#{local_port}")
+          end
+
+          return @session
       end
 
       def download(path, local_path)
