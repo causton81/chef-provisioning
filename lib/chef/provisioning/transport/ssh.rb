@@ -68,6 +68,7 @@ module Provisioning
               local_port = forward_info.fetch(:local_port)
 
               actual_port, actual_host = forward_port(local_port, local_host, remote_port, remote_host)
+              raise "#{host} Error setting up remote port forward #{remote_host}:#{remote_port}. Port may already be bound on server." if not actual_port
               Chef::Log.info("#{host} forwarded remote #{actual_host}:#{actual_port} to local #{local_host}:#{local_port}")
           end
 
